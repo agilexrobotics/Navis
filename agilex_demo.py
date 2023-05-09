@@ -22,7 +22,7 @@ def map_coordinate_to_png(pos, map_info):
         输出参数:转成png坐标(x,y)
     ''' 
     map_pos_x = (pos[0] - map_info['originX']) / map_info['resolution']
-    map_pos_y = map_info['gridHeight'] -  (pos[1] - map_info['gridHeight']) / map_info['resolution']
+    map_pos_y = map_info['gridHeight'] -  (pos[1] - map_info['originX']) / map_info['resolution']
     return (map_pos_x, map_pos_y)
 
 def png_coordinate_to_map(pos, map_info):
