@@ -135,8 +135,6 @@ std::string  set_initial_pos(const MPosition & pos_, double angle)
 
 void ws_client()
 {
-
-
     //1.实例化 websocket 客户端
     WebSocketClient ws_client; 
     // url 根据实际ip和端口 填写
@@ -144,33 +142,35 @@ void ws_client()
     //std::string url = "ws://127.0.0.1:9090";
 
     ws_client.connect(url);
-    
+  
+    // 等待2秒 等待连接成功  
     std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-    //2. 心跳数据定时器thread 一秒发送一次心跳信息,与服务端保存长连接的必要条件
-    string  heart_data = "{\"op\":\"ping\",\"timeStamp\":\"1\"}";
-    std::thread([&ws_client, heart_data]() {
+    //2. 心跳数据定时器thread 一秒发送一次心跳信息,与服务端保存长连接的必要条件,收到的数据是二进制乱码
+    std::thread([&ws_client ]() {
+       string  heart_data = "{\"op\":\"ping\",\"timeStamp\":\"1\"}";
        while (1) {
             ws_client.send_message(heart_data);
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
        }
      }).detach();
-    
+   
 
     //3. 需要订阅的话题数据，两种方式的数据，
     //方式1 宏定义
     std::string odom_msg = SUBSCRIBE_ODOM;
     std::string slam_status = SUBSCRIBE_SLAM_STATUS;
-    //client.send_message(odom_msg);
-    //ws_client.send_message(slam_status);
+    //ws_client.send_message(odom_msg);
+    ws_client.send_message(slam_status);
 
+    
     //方式2 json 格式
     json points_raw = {
         {"op","subscribe"},
         {"topic","/points_raw" }//3D点云话题
        // {"compression","cbor" } //开放这条字段，收到的数据会是二进制数据，目前没有解析的接口，因此不建议开放该字段
     };
-    ws_client.send_message(points_raw.dump());
+    //ws_client.send_message(points_raw.dump());
 
     
     /*4. 建图顺序: 开启录包->结束录包 (对应的id_type: record_data)
@@ -179,6 +179,7 @@ void ws_client()
       //对应的op_type: start:开启,stop:结束,cancel:取消
                   
     */
+    
     //5. 开启导航 (对应的id_type: follow_line)
     std::string file_name, op_type, id_type;
     file_name   = "3221";
@@ -194,6 +195,8 @@ void ws_client()
         }}
     };
     //ws_client.send_message(input_op.dump());
+    
+    while(1){} //堵塞作用，用于循环监听数据
 
 }
 
@@ -245,6 +248,7 @@ void http_client()
     */
     //ws_client.send_message(str_initial);
 
+  
     //以下是假设的设置三个点，，用于导航
     MPosition png_pos_1(176,141), png_pos_2(201,143),png_pos_3(225,136) ;
     png_coordinate_to_map(map_info,png_pos_1);
@@ -307,6 +311,7 @@ void http_client()
     }
 
 }
+
 
 int main() {
 

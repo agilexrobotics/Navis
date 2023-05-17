@@ -7,6 +7,7 @@
 #include <codecvt>
 #include <locale>
 #include <memory>
+#include <pthread.h>
 
 #include "jsonparser.hpp"
 
@@ -27,6 +28,13 @@ public:
         client_.set_fail_handler(std::bind(&WebSocketClient::on_fail,this, std::placeholders::_1));
         client_.set_open_handler(std::bind(&WebSocketClient::on_open,this, std::placeholders::_1));
     }
+    ~WebSocketClient(){
+	connection_ptr = nullptr;
+	if (client_thread_.joinable()) {
+	    //client_thread_.join();
+	    pthread_cancel(client_thread_.native_handle());// stop client thread
+	}
+    }
 
     void connect(const std::string& uri) {
         websocketpp::lib::error_code ec;
@@ -41,6 +49,7 @@ public:
         client_.connect(connection);
         set_connection_ptr(connection);
         client_thread_ = std::thread(&Client::run, &client_);
+	client_thread_.detach();
         m_url = uri;
     }
 	
@@ -48,8 +57,9 @@ public:
     void send_message(const std::string & message) {
         if (is_connected) {
             client_.send(get_connection(),message, websocketpp::frame::opcode::text);
-        } else 
+        } else { 
             return;
+	}
     }
 
     void disconnect(websocketpp::close::status::value code, const std::string& reason) {
@@ -82,9 +92,9 @@ private:
         }else if (msg->get_opcode() == websocketpp::frame::opcode::binary) {
 
             //std::cout << "Received message:other "<< msg->get_payload()  << std::endl;
-            std::cout << "Received message:other "<< websocketpp::utility::to_hex(msg->get_payload())  << std::endl;
+            //std::cout << "Received message:other "<< websocketpp::utility::to_hex(msg->get_payload())  << std::endl;
         } else {
-            std::cout << "Received message:else "<<msg->get_payload();
+           // std::cout << "Received message:else "<<msg->get_payload();
         }
 
     }

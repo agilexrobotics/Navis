@@ -88,9 +88,7 @@ private:
       {
         std::cout<<static_cast<int>(data[i])<< " ";
       }
-      std::cout<< " aa"<<std::endl;
       */
-
       delete data;
       return  true;
   }
