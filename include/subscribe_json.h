@@ -81,14 +81,25 @@ void png_coordinate_to_map( const  Mapinfo &map_info, MPosition& m_pos)
     m_pos.y = (map_info.gridHeight - m_pos.y) * map_info.resolution + map_info.originY;
 }
 
-// 欧拉角转四元数
+// 欧拉角(角度)先转弧度,转四元数
 void quaternion_from_euler(double roll, double pitch,double yaw, MQuaternion & q)
 {
+    roll = roll * ( M_PI /180);
+    pitch = pitch * ( M_PI/180);
+    yaw = yaw * ( M_PI/180);
     q.x = sin(roll/2) * cos(pitch/2) * cos(yaw/2) - cos(roll/2) * sin(pitch/2) * sin(yaw/2);
     q.y = cos(roll/2) * sin(pitch/2) * cos(yaw/2) + sin(roll/2) * cos(pitch/2) * sin(yaw/2);
     q.z = cos(roll/2) * cos(pitch/2) * sin(yaw/2) - sin(roll/2) * sin(pitch/2) * cos(yaw/2);
     q.w = cos(roll/2) * cos(pitch/2) * cos(yaw/2) + sin(roll/2) * sin(pitch/2) * sin(yaw/2);
 }
+// 四元数转成 欧拉角中的yaw 角(弧度)， 再转成角度
+float quaternion_to_yaw( MQuaternion & q)
+{
+    float yaw = atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.z * q.z + q.y * q.y));
+    yaw = yaw * (180 / M_PI);
+    return yaw;
+}
+
 
 
 
