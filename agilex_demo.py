@@ -39,14 +39,27 @@ def png_coordinate_to_map(pos, map_info):
 
 def quaternion_from_euler(roll, pitch, yaw):
     """
-        角度转换成四元素,返回四元素
+        角度先转成弧度，再转换成四元素,返回四元素
     """
+    roll = roll *  (math.pi / 180)
+    pitch = pitch *  (math.pi / 180)
+    yaw = yaw *  (math.pi / 180)
     qx = np.sin(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) - np.cos(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
     qy = np.cos(roll/2) * np.sin(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.cos(pitch/2) * np.sin(yaw/2)
     qz = np.cos(roll/2) * np.cos(pitch/2) * np.sin(yaw/2) - np.sin(roll/2) * np.sin(pitch/2) * np.cos(yaw/2)
     qw = np.cos(roll/2) * np.cos(pitch/2) * np.cos(yaw/2) + np.sin(roll/2) * np.sin(pitch/2) * np.sin(yaw/2)
 
     return [qx, qy, qz, qw]
+
+def quaternion_to_euler(ori):
+    """
+       四元素转成弧度，再转换成角度,返回yaw 角度
+    """
+    roll = math.atan2(2 * (ori.w * ori.x + ori.y * ori.z), 1 - 2 * (ori.x * ori.x + ori.y * ori.y))
+    pitch = math.asin(2 * (ori.w * ori.y - ori.x * ori.z))
+    yaw = math.atan2(2 * (ori.w * ori.z + ori.x * ori.y), 1 - 2 * (ori.z * ori.z + ori.y * ori.y))
+    math.degrees(yaw)
+    return yaw
 
 class WSClient:
     def __init__(self, address):
