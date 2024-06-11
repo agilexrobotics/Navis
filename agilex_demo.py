@@ -10,9 +10,12 @@ import math
 from threading import Thread, Timer
 import base64
 import array
+import cv2
 
-ws_url = "ws://192.168.1.101:9090" #填写实际的机器人IP地址
-http_url = "http://192.168.1.101:8880"
+# ws_url = "ws://101.33.245.108:9090" 
+# http_url = "http://101.33.245.108:9358/apiUrl"
+ws_url = "ws://10.10.96.19:9090" #填写实际的机器人IP地址
+http_url = "http://10.10.96.19/apiUrl"
 token = None
 
 def map_coordinate_to_png(pos, map_info):
@@ -22,7 +25,7 @@ def map_coordinate_to_png(pos, map_info):
         输出参数:转成png坐标(x,y)
     ''' 
     map_pos_x = (pos[0] - map_info['originX']) / map_info['resolution']
-    map_pos_y = map_info['gridHeight'] -  (pos[1] - map_info['originX']) / map_info['resolution']
+    map_pos_y = map_info['gridHeight'] -  (pos[1] - map_info['originY']) / map_info['resolution']
     return (map_pos_x, map_pos_y)
 
 def png_coordinate_to_map(pos, map_info):
@@ -62,9 +65,12 @@ def quaternion_to_euler(ori):
     return yaw
 
 class WSClient:
-    def __init__(self, address):
+    def __init__(self, address, id_):
+        self.isconnect = False
         self.ws = create_connection(address)
-        self.isconnect = True
+        if self.ws.connected:
+            self.isconnect = True
+
         self.input_data = {
             "op": "call_service",
             "service": "/input/op",
@@ -76,20 +82,34 @@ class WSClient:
             }
         }
 
+        self.heart_msg = {
+            "op": "ping",
+            "timeStamp": 0,
+            "id":id_
+        }
+
     def send_msg(self, args):
-        if self.ws is not None:
+        if self.isconnect:
             msg = json.dumps(args, ensure_ascii=False).encode("utf-8")
             self.ws.send(msg)
-            
-            return json.loads(self.ws.recv())
+
+    def receive(self):
+        """
+           The data returned by the websocket server is in this function 
+        """
+        try:
+            while(True):
+                print('receive_message = ',  self.ws.recv())
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt")
+   
 
     def get_bytes_data(self, args):
         if self.ws is not None:
             msg = json.dumps(args, ensure_ascii=False).encode("utf-8")
-            self.ws.send(msg)
-          
-            return self.ws.recv()
-        
+            self.ws.send(msg)   
+            # Used for a single call to an interface test to return bytes data
+            return self.ws.recv() 
 
     def publish_data(self, args):
         if self.ws is not None:
@@ -97,15 +117,10 @@ class WSClient:
             self.ws.send(msg)
         
     def heart_beat(self):
-    
-        if self.isconnect == True:
-            message = { 
-                "op": "ping",
-                "timeStamp": str(time.time()*1000).split(".")[0]
-            }
-            res = self.send_msg(message)
-            time1 = Timer(1, self.heart_beat)
-            time1.start()
+        if self.isconnect is True:
+            self.heart_msg['timeStamp'] = str(time.time()*1000).split(".")[0]
+            self.send_msg(self.heart_msg)
+
         
     def on_close(self):
         if self.ws is not None and self.isconnect:
@@ -167,19 +182,18 @@ class WSClient:
     def sub_slam_status(self):
         msg = {   
             "op": "subscribe",
-            "topic": "/slam_status",
+            "topic": "/slam_status"
             # "type":"nav_msgs/Odometry" 
         }
     
-        res = self.send_msg(msg)
+        self.send_msg(msg)
 
-    def sub_task_status(self):
+    def sub_robot_status(self):
         msg = {   
             "op": "subscribe",
-            "topic": "/run_management/task_status"
-            # "type":"nav_msgs/Odometry" 
+            "topic": "/dash_board/robot_status"
         }
-        print('task_status = ',self.send_msg(msg))
+        self.send_msg(msg)
 
     def cancel_nav(self):
         msg = {
@@ -196,6 +210,14 @@ class WSClient:
         }
         self.publish_data(msg)
 
+    def start_heartbeat_timer(self, interval):
+        self.timer = threading.Timer(interval, self.start_heartbeat_timer, (interval,))
+        self.timer.start()
+
+        self.heart_beat()
+
+    def stop_heartbeat_timer(self):
+        self.timer.cancel()
 
     def sub_pointCloud2(self):
         msg = {   
@@ -212,13 +234,12 @@ class WSClient:
 
         # 无compression 字段使用默认的发送数据接口
         res = self.send_msg(msg)
-        data= res.get("msg").get("data")
-       
+        data= res.get("msg").get("data")   
         decode_data = base64.b64decode(data, altchars=None)
         data_array = array.array('B',decode_data)
-        print(data_array)
-        
-    
+        # print(data_array)
+
+
     def sub_scan(self):
         msg = {   
             "op": "subscribe",
@@ -235,23 +256,50 @@ class WSClient:
         # 无compression 字段使用默认的发送数据接口
         # res = self.send_msg(msg)
         # data= res.get("msg").get("ranges")
-        # print(data)
-       
-
-        
+        # print(data)    
 
     def sub_camera_pointCloud(self):
         msg = {   
             "op": "subscribe",
-            "topic": "/camera/color/image_raw",
-            "compression": "cbor" 
+            "topic": "/camera/color/image_raw"
+            # "compression": "cbor" 
         }
     
         # compression 字段使用下面接口获取数据
-        res = self.get_bytes_data(msg)
-        data_array = array.array('B',res)
-        print(data_array)
+        message = self.send_msg(msg)
+        # data_array = array.array('B',message)
         
+        image_data = message["msg"]['data']
+        
+        decode_data = base64.b64decode(image_data, altchars=None)
+        img_array = array.array('B',decode_data)
+        # img_array = bytearray('B', image_data)
+        img_array = np.frombuffer(img_array, np.uint8)
+       
+        # print(img_array)
+        image_ = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        image_name = R"E:\workspace\userapi\test\te.jpg"
+        cv2.imwrite(image_name, image_)
+
+        # # Build the image format and dimensions
+        # format = message['encoding']
+        # width = message['width']
+        # height = message['height']
+
+        # # Build the PIL Image object
+        # # image = Image.frombytes(format, (width, height), base64.b64decode(image_data))
+        # image = Image.frombytes(format, (width, height), image_data)
+
+        # # Save the image as a picture file
+       
+        # image.save(image_name)
+        
+    def sub_task_status(self):
+        msg = {   
+            "op": "subscribe",
+            "topic": "/run_management/task_status"
+        }
+        print('/run_management/task_status = ',self.send_msg(msg))
 
 class HttpClient():
     def __init__(self, url):
@@ -284,6 +332,7 @@ class HttpClient():
         response = requests.request("GET", url, headers=headers)
         res_json = json.loads(response.text)
         self.map_list = res_json.get('data')
+        print('aaa', self.map_list)
 
     def get_map_png(self, map_name):
         url = self.url + "/downloadpng?mapName=" + map_name
@@ -424,28 +473,38 @@ class HttpClient():
             print('set task success~~~')
 
 
-
+import threading
 if __name__ == '__main__':
     ### Http 客户端
-    # http_client =  HttpClient(http_url)
-    # http_client.login_()
+    http_client =  HttpClient(http_url)
+    http_client.login_()
 
-    ### websocket 客户端
-    ws_client =  WSClient(ws_url)
+    ### websocket 客户端 id_ = uuid
+    ws_client =  WSClient(ws_url, "aa-vv-9898")
     ## 定时发送心跳包
-    ws_client.heart_beat()
+    ws_client.start_heartbeat_timer(2)
 
     ###  订阅设备当前导航状态
-    # ws_client.sub_slam_status()
+    ws_client.sub_task_status()
+
+    # 如果单开线程来 跑接收数据函数，可能会导致无法退出程序
+    # heartbeat_thread = threading.Thread(target= ws_client.receive)
+    # heartbeat_thread.start()
+    ws_client.sub_robot_status()
+    ws_client.sub_slam_status()
+    # 注意这里会阻塞
+    ws_client.receive() 
 
     ###  订阅激光雷达3D点云数据
-    ws_client.sub_pointCloud2()
+    # ws_client.sub_pointCloud2()
 
     ###  订阅激光雷达2D点云数据,只有在开启导航的情况下才会订阅得到数据
     # ws_client.sub_scan()
 
-    ###  订阅相机数据
-    # ws_client.sub_camera_pointCloud()
+    ##  订阅相机数据
+    # data1 =  ws_client.sub_camera_pointCloud()
+
+    # save_image(data1)
     
     map_name = 'office'
 
@@ -490,7 +549,7 @@ if __name__ == '__main__':
 
     ### 使用windows 系统自带的画图软件打开下载好的地图png,使用鼠标点击图片白色区域任务点,左下角显示该点对应的坐标
     ### 使用,标转换成地图真实坐标，如下坐标[x,y]
-    # png_coor = [684,270]
+    # png_coor = [960,275]
     # if map_info:
     #     pos_x,pos_y =  png_coordinate_to_map(png_coor, map_info)
     #     print("1 ",pos_x, pos_y)
@@ -515,4 +574,4 @@ if __name__ == '__main__':
     ### 关闭导航
     #ws_client.follow_line(idtype="stop", filename=map_name)
 
-    ws_client.on_close()
+    # ws_client.on_close()
